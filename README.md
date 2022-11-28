@@ -1,6 +1,6 @@
 
 
-<p align="center"><img src="./Images/holo-1.jpg" alt="FiberPunk's logo" width=500/></p>
+<p align="center"><img src="./images/holo-1.jpg" alt="FiberPunk's logo" width=500/></p>
 
 # HoloCubic
 
