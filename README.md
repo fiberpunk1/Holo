@@ -1,6 +1,7 @@
 
 
-![](images/holo-1.jpg)
+<p align="center"><img src="./Images/holo-1.jpg" alt="FiberPunk's logo" width=500/></p>
+
 # HoloCubic
 
 [Youtube demo video](https://www.youtube.com/watch?v=17BWQ2w3EQg)
