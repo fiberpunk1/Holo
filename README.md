@@ -2,7 +2,7 @@
 
 <p align="center"><img src="./images/holo-1.jpg" alt="FiberPunk's logo" width=500/></p>
 
-# HoloCubic
+# Holo
 
 [Youtube demo video](https://www.youtube.com/watch?v=17BWQ2w3EQg)
 
