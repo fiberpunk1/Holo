@@ -33,7 +33,7 @@ This tool also provides the function of searching for holocubic devices in the l
 
 ### 2.1 Dependencies
 - vscode
-- platform
+- platformIO
 - espressif-32(3.5.0)
 
 1.Open this directory with vscode: Holo/2.Firmware/Holo-fw/ 
