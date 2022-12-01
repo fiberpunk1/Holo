@@ -37,7 +37,9 @@ This tool also provides the function of searching for holocubic devices in the l
 - espressif-32(3.5.0)
 
 1.Open this directory with vscode: Holo/2.Firmware/Holo-fw/ 
+
 2.Modify the COM port in the platformio.ini file
+
 3.Click the location shown in the figure below to compile or upload the firmware
 ![img](images/holo-3.jpg)
 
