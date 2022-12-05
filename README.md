@@ -18,7 +18,7 @@ This project is a fork from [peng-zhihui's HoloCubic](https://github.com/peng-zh
 ![img](images/holo-2.jpg)
 We have developed a windows software that can be used to generate 3D rotating animations of stl files. You only need to treat your stl file like software to generate animation.
 
-[Download link](www.fiber-punk.com)
+[Windows Software](https://fiber-punk.com/pages/support)
 
 The main function:
 - Search HoloCubic in local network
