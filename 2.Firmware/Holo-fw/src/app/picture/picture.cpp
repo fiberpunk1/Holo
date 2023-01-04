@@ -9,12 +9,26 @@
 
 // 相册的持久化配置
 #define PICTURE_CONFIG_PATH "/picture.cfg"
+#define MEDIA_CONFIG_PATH "/media.cfg"
 struct PIC_Config
 {
     unsigned long switchInterval; // 自动播放下一张的时间间隔 ms
 };
 
+#include "docoder.h"
+#include "DMADrawer.h"
+
+#define MEDIA_PLAYER_APP_NAME "Media"
+
+#define VIDEO_WIDTH 240L
+#define VIDEO_HEIGHT 240L
+#define MOVIE_PATH "/movie"
+#define NO_TRIGGER_ENTER_FREQ_160M 90000UL // 无操作规定时间后进入设置160M主频（90s）
+#define NO_TRIGGER_ENTER_FREQ_80M 120000UL // 无操作规定时间后进入设置160M主频（120s）
+
+
 ACTIVE_TYPE pre_statu;
+uint8_t pre_play_type;//记录上一次播放的是图片还是视屏,0 播放图片, 1播放视屏
 
 void picture_init();
 void picture_process(const ImuAction *act_info);
@@ -55,6 +69,22 @@ void read_config(PIC_Config *cfg)
     }
 }
 
+struct MP_Config
+{
+    uint8_t switchFlag; // 是否自动播放下一个（0不切换 1自动切换）
+    uint8_t powerFlag;  // 功耗控制（0低发热 1性能优先）
+};
+
+struct MediaAppRunData
+{
+    PlayDocoderBase *player_docoder;
+    unsigned long preTriggerKeyMillis; // 最近一回按键触发的时间戳
+    int movie_pos_increate;
+    File_Info *movie_file; // movie文件夹下的文件指针头
+    File_Info *pfile;      // 指向当前播放的文件节点
+    File file;
+};
+
 struct PictureAppRunData
 {
     unsigned long pic_perMillis;      // 图片上一回更新的时间
@@ -64,6 +94,9 @@ struct PictureAppRunData
     File_Info *pfile;           // 指向当前播放的文件节点
     bool tftSwapStatus;
 };
+
+static MP_Config video_cfg_data;
+static MediaAppRunData *video_run_data = NULL;
 
 static PIC_Config cfg_data;
 static PictureAppRunData *run_data = NULL;
@@ -109,6 +142,39 @@ File_Info *get_next_file(File_Info *p_cur_file, int direction)
     }
     return pfile;
 }
+static void release_player_docoder(void)
+{
+    // 释放具体的播放对象
+    if (NULL != video_run_data->player_docoder)
+    {
+        delete video_run_data->player_docoder;
+        video_run_data->player_docoder = NULL;
+    }
+}
+void video_run_init()
+{
+    video_run_data = (MediaAppRunData *)calloc(1, sizeof(MediaAppRunData));
+    video_run_data->player_docoder = NULL;
+    video_run_data->movie_pos_increate = 1;
+    video_run_data->movie_file = NULL; // movie文件夹下的文件指针头
+    video_run_data->pfile = NULL;      // 指向当前播放的文件节点
+    video_run_data->preTriggerKeyMillis = millis();
+}
+
+//初始化一个文件解码器
+static bool video_start(bool create_new, String filename)
+{
+    video_run_init();
+    video_run_data->file = tf.open(filename);
+    // 直接解码mjpeg格式的视频
+    Serial.print(F("before release the player decoder...")); 
+    video_run_data->player_docoder = new MjpegPlayDocoder(&video_run_data->file, true);
+    Serial.print(F("MJPEG video start --------> "));  
+    Serial.println(filename);
+    return true;
+}
+
+
 
 //获取所有的目录信息，每个目录对应一个打印文件
 void update_all_img_dir()
@@ -121,10 +187,28 @@ void update_all_img_dir()
         File entry = tf_root.openNextFile();
         if(!entry)
             break;
+        
+        if(String(entry.name()).startsWith("/config"))
+        {
+            Serial.println("Hello this is the entry name:");
+            Serial.println(String(entry.name()));
+            continue;
+        }
+
         if(entry.isDirectory())
         {
-            if(!String(entry.name()).startsWith("/System"))
-            print_file.push_back(entry.name());
+            if((!String(entry.name()).startsWith("/System")))
+            {
+                print_file.push_back(entry.name());
+            }
+            
+        }
+        else 
+        {
+            if(String(entry.name()).endsWith(".mjpeg") || String(entry.name()).endsWith(".MJPEG"));
+            {
+                print_file.push_back(entry.name());
+            }
         }
     }
 }
@@ -139,6 +223,9 @@ void picture_init()
     run_data->pic_perMillis = 0;
     run_data->image_file = NULL;
     run_data->pfile = NULL;
+    video_run_init();
+
+
     // 保存系统的tft设置参数 用于退出时恢复设置
     run_data->tftSwapStatus = tft->getSwapBytes();
     tft->setSwapBytes(true); // We need to swap the colour bytes (endianess)
@@ -151,9 +238,33 @@ void picture_init()
 
 
 }
+
 void update_print_status(int pro, int head, int temp)
 {
     display_print_status(pro,head,temp);
+}
+
+void video_check_start()
+{
+    String p_current_file = print_file[current_file_index];
+    if(p_current_file.endsWith(".mjpeg") || p_current_file.endsWith(".MJPEG"))
+    {
+        Serial.println("Here in video check start...");
+        Serial.println(p_current_file);
+        release_player_docoder();
+        delay(30);
+        if(video_run_data->file.available())
+        {
+            Serial.println("Now let's close the file");
+            video_run_data->file.close(); 
+            
+        }
+
+        Serial.println("Here in video close file");
+        video_start(true, p_current_file);
+        cfg_data.switchInterval = 15;
+        display_piclabel("",LV_SCR_LOAD_ANIM_FADE_ON);
+    }
 }
 
 void picture_process(const ImuAction *act_info)
@@ -181,6 +292,7 @@ void picture_process(const ImuAction *act_info)
                     current_file_name_index = 1;
             }
             run_data->pic_perMillis = millis() - 1000; // 间接强制更新
+            video_check_start();
         }
         else if (TURN_LEFT == act_info->active)
         {
@@ -191,6 +303,8 @@ void picture_process(const ImuAction *act_info)
                     anim_type = LV_SCR_LOAD_ANIM_MOVE_LEFT;
                     current_file_index -= 1;
                     current_file_index = ((current_file_index + print_file.size()) % print_file.size());
+                    if(current_file_index<0)
+                        current_file_index = 0;
                     current_file_name_index = 1;
                 }
             }
@@ -199,31 +313,66 @@ void picture_process(const ImuAction *act_info)
                 anim_type = LV_SCR_LOAD_ANIM_MOVE_LEFT;
                 current_file_index -= 1;
                 current_file_index = ((current_file_index + print_file.size()) % print_file.size());
+                if(current_file_index<0)
+                    current_file_index = 0;
                 current_file_name_index = 1;
             }
             run_data->pic_perMillis = millis() - 1000; // 间接强制更新
+            video_check_start();
         }
 
 
         if (doDelayMillisTime(cfg_data.switchInterval, &run_data->pic_perMillis, false) == true)
         {
-            String display_full_name = print_file[current_file_index]+"/"+String(current_file_name_index)+".jpg";
-            Serial.print(display_full_name);
-            current_file_name_index++;
-            if(current_file_name_index>11)
-                current_file_name_index = 1;
-            
-            TJpgDec.drawSdJpg(20, 20, display_full_name);
-            // init_piclabel();
-            String disp_name =  print_file[current_file_index].substring(1,print_file[current_file_index].length()) + ".gco";
-            display_piclabel(disp_name.c_str(),anim_type);
+            String p_current_file = print_file[current_file_index];
+            if(p_current_file.endsWith(".mjpeg") || p_current_file.endsWith(".MJPEG"))
+            {
+                //在这里播放视屏
+                pre_play_type = 1;
+                if (video_run_data->file.available())
+                {
+                    // 播放一帧数据
+                    video_run_data->player_docoder->video_play_screen();
+                }
+                
+            }
+            else
+            {
+                if(pre_play_type)
+                {
+                    release_player_docoder();
+                    video_run_data->file.close(); 
+                    cfg_data.switchInterval = 300;
+                    tft->fillScreen(TFT_BLACK);
+                    TJpgDec.setJpgScale(1);
+                    TJpgDec.setCallback(tft_output);
+
+                }
+                String display_full_name = print_file[current_file_index]+"/"+String(current_file_name_index)+".jpg";
+                Serial.print(display_full_name);
+                current_file_name_index++;
+                if(current_file_name_index>11)
+                    current_file_name_index = 1;
+                
+                TJpgDec.drawSdJpg(20, 20, display_full_name);
+                // init_piclabel();
+                String disp_name =  print_file[current_file_index].substring(1,print_file[current_file_index].length()) + ".gco";
+                display_piclabel(disp_name.c_str(),anim_type);
+                pre_play_type = 0;
+                
+            }
+
             // display_print_status(11,21,22);
             
         }
         pre_statu = act_info->active;
     }
-    
-    delay(300);
+
+    if(pre_play_type)
+        delay(15);
+    else
+        delay(300);
+
     
 }
 
