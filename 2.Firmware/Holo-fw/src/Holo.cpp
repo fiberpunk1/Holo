@@ -176,7 +176,7 @@ void deleteRecursive(String path)
     {
       break;
     }
-    String entryPath = path + "/" + entry.name();
+    String entryPath = entry.name();
     if (entry.isDirectory()) 
     {
       entry.close();
@@ -321,7 +321,7 @@ void setup()
     }
 
         /*** Init screen ***/
-    screen.init(4,80);
+    screen.init(4,95);
     /*** Init on-board RGB ***/
     rgb.init();
     rgb.setBrightness(0.05).setRGB(0, 64, 64);
